@@ -1,68 +1,14 @@
 import streamlit as st
-"""
-FinForecast AI - Smart Financial Forecasting Tool
-
-A comprehensive financial analysis and forecasting application built with Streamlit that provides:
-- Historical financial data retrieval from multiple sources (FMP, SAHMK, EDGAR, Polygon, yfinance)
-- Financial forecasting with configurable time horizons (3-10 years)
-- Multiple analysis scenarios including DCF valuation, Monte Carlo simulations
-- Industry benchmarks and analyst consensus data
-- Support for international stocks (US, Saudi Arabia, and other markets)
-
-Key Components:
-- Ticker symbol resolution via Yahoo Finance
-- Priority-based data fetching with fallback mechanisms
-- Secure API key management via Streamlit Secrets
-- Session state management for UI interactions
-- Data caching for optimized performance
-
-Dependencies:
-    - streamlit: Web application framework
-    - yfinance: Yahoo Finance data retrieval
-    - pandas: Data manipulation and analysis
-    - numpy: Numerical computations
-    - plotly: Interactive visualizations
-    - requests: HTTP requests
-    - polygon: Polygon.io API client
-    - edgartools (optional): SEC EDGAR data retrieval
-    - edgar (optional): SEC identity management
-
-Main Functions:
-    - get_ticker(query): Resolves company name or ticker symbol
-    - fetch_financials(ticker, fmp_key, sah_mk_key, polygon_key, edgar_email):
-        Fetches historical financial data with multi-source priority fallback
-
-Configuration:
-    - Requires API keys in Streamlit Secrets:
-        - FMP_API_KEY: Financial Modeling Prep API key
-        - SAHMK_API_KEY: Saudi Tadawul market API key
-        - POLYGON_API_KEY: Polygon.io API key
-        - EDGAR_EMAIL: Email for SEC EDGAR data retrieval
-"""
 import yfinance as yf
-import requests
-from datetime import datetime
-# from io import BytesIO            # لم يعد مستخدماً
-from polygon import RESTClient
-
-# edgar/edgartools اختياريان – إذا لم يتم تثبيتهما سيتم تخطي
-# المصدر المقابل في دالة جلب البيانات.
-try:
-    from edgar import set_identity
-    from edgartools import Company # pyright: ignore[reportMissingImports]
-except ImportError:              # pragma: no cover
-    set_identity = None
-    Company = None
-
 import pandas as pd
 import numpy as np
 import plotly.express as px
-
-# تهيئة مفاتيح الحالة حتى لا تحدث KeyError لاحقاً
-if "run_analysis" not in st.session_state:
-    st.session_state.run_analysis = False
-if "data_loaded" not in st.session_state:
-    st.session_state.data_loaded = False
+import requests
+from datetime import datetime
+from io import BytesIO
+from polygon import RESTClient
+from edgar import set_identity
+from edgar import Company
 
 st.set_page_config(page_title="FinForecast AI", layout="wide")
 st.title("FinForecast AI - Smart Financial Forecasting Tool")
@@ -77,10 +23,8 @@ POLYGON_KEY   = st.secrets.get("POLYGON_API_KEY", "")
 EDGAR_EMAIL   = st.secrets.get("EDGAR_EMAIL", "anonymous@example.com")
 
 
-def get_ticker(query: str) -> str:
-    if any(x in query.upper() for x in [".SR", ".T", ".L"]) \
-       or query.isupper() \
-       or query.replace(".", "").isdigit():
+def get_ticker(query):
+    if any(x in query.upper() for x in [".SR", ".T", ".L"]) or query.isupper() or query.replace(".", "").isdigit():
         return query.upper()
     try:
         data = yf.utils.get_json(
@@ -88,20 +32,18 @@ def get_ticker(query: str) -> str:
             params={"q": query, "quotesCount": 1},
             user_agent="Mozilla/5.0"
         )
-        if data.get("quotes"):
-            return data["quotes"][0]["symbol"]
-    except Exception:
-        pass
-    return query.upper()
+        return data["quotes"][0]["symbol"]
+    except:
+        return query.upper()
 
 
 with st.sidebar:
     query = st.text_input("Company Name or Ticker", "AAPL")
     ticker = get_ticker(query)
     forecast_years = st.slider("Forecast Years", 3, 10, 5)
-
+    
     st.caption("API keys are loaded from Streamlit Secrets")
-
+    
     if st.button("Run Analysis"):
         st.session_state.run_analysis = True
 
@@ -125,7 +67,7 @@ def fetch_financials(ticker, fmp_key, sah_mk_key, polygon_key, edgar_email):
                         'eps': 'EPS'
                     })
                     return df[['Year', 'Revenue', 'Operating Income', 'Net Income', 'EPS']].sort_values('Year')
-        except Exception:
+        except:
             pass
 
     # Priority 2: SAHMK (Saudi stocks)
@@ -153,11 +95,11 @@ def fetch_financials(ticker, fmp_key, sah_mk_key, polygon_key, edgar_email):
                 if 'EPS' in df.columns:
                     cols.append('EPS')
                 return df[cols].sort_values('Year')
-        except Exception:
+        except:
             pass
 
-    # Priority 3: EDGAR (US stocks) – فقط إذا كانت الحزم متاحة
-    if Company and set_identity and not ticker.endswith('.SR') and '@' in edgar_email:
+    # Priority 3: EDGAR (US stocks)
+    if not ticker.endswith('.SR') and '@' in edgar_email:
         try:
             set_identity(edgar_email)
             company = Company(ticker)
@@ -171,6 +113,7 @@ def fetch_financials(ticker, fmp_key, sah_mk_key, polygon_key, edgar_email):
                     'operating_income': 'Operating Income',
                     'net_income': 'Net Income'
                 }
+                # محاولة التعامل مع أسماء الأعمدة المختلفة
                 for old, new in rename_dict.items():
                     if old in inc.columns:
                         inc = inc.rename(columns={old: new})
@@ -181,7 +124,7 @@ def fetch_financials(ticker, fmp_key, sah_mk_key, polygon_key, edgar_email):
                     cols.append('EPS')
                 return inc[cols].sort_values('Year')
         except Exception as e:
-            st.warning(f"EDGAR failed: {e}")
+            st.warning(f"EDGAR failed: {str(e)}")
 
     # Priority 4: Polygon
     if polygon_key:
@@ -203,7 +146,7 @@ def fetch_financials(ticker, fmp_key, sah_mk_key, polygon_key, edgar_email):
             df = pd.DataFrame(data).dropna(how="all")
             if not df.empty:
                 return df.sort_values("Year")
-        except Exception:
+        except:
             pass
 
     # Fallback: yfinance
@@ -219,7 +162,7 @@ def fetch_financials(ticker, fmp_key, sah_mk_key, polygon_key, edgar_email):
                 "EPS": income.get("Diluted EPS")
             }).dropna(how="all")
             return df.sort_values("Year")
-    except Exception:
+    except:
         pass
 
     return pd.DataFrame()
@@ -252,11 +195,11 @@ if st.session_state.get("run_analysis", False) or "data_loaded" in st.session_st
                 st.warning("لم يتم العثور على بيانات مالية تاريخية")
 
         # باقي الأقسام (Forecast, DCF, Monte Carlo, Analysts) كما هي
-        # … انسخ الكود السابق من with tabs[1]: حتى النهاية إذا احتجته …
+        # ... (انسخ باقي الكود من عند with tabs[1]: لحد النهاية بدون تغيير كبير)
 
         st.session_state.data_loaded = True
 
     except Exception as e:
-        st.error(f"حدث خطأ: {e}")
+        st.error(f"حدث خطأ: {str(e)}")
 
 st.caption("FinForecast AI – يعتمد على FMP + SAHMK + Polygon + EDGAR + yfinance")

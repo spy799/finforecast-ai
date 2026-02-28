@@ -5,5 +5,5 @@ numpy
 plotly
 requests
 polygon-api-client
-edgartools
+edgar
 openpyxl
