@@ -7,8 +7,8 @@ import requests
 from datetime import datetime
 from io import BytesIO
 from polygon import RESTClient
-from edgar import set_identity
-from edgar import Company
+from edgartools import set_identity
+from edgartools import Company
 
 st.set_page_config(page_title="FinForecast AI", layout="wide")
 st.title("FinForecast AI - Smart Financial Forecasting Tool")
