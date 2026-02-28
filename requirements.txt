@@ -4,6 +4,6 @@ pandas
 numpy
 plotly
 requests
-openpyxl
+polygon-api-client
 edgartools
-requests
+openpyxl
